@@ -1,0 +1,66 @@
+<root main_tree_to_execute = "MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <!-- 1. 전술 정보 갱신 (Tactical Blackboard State Updates) -->
+      <Sequence>
+        <SelectTarget name="SelectTarget" BB="{BB}"/>
+        <DirectionVectorUpdate name="DirectionVectorUpdate" BB="{BB}"/>
+        <DistanceUpdate name="DistanceUpdateService" BB="{BB}"/>
+        <CheckSight name="CheckSight" BB="{BB}"/>          
+        <AngleOffUpdate name="AngleOffUpdate" BB="{BB}"/>
+        <AspectAngleUpdate name="AspectAngleUpdate" BB="{BB}"/>
+
+        <!-- 2. 계층적 전술 판단 (Fallback Decision Tree) -->
+        <Fallback>
+          <!-- 1순위: 비상 고도 방어막 (Altitude Emergency Guard < 650m)
+               2026-08-17: 이력(hysteresis) 가드(650->1200m 복귀)를 60개 시나리오로
+               검증했으나 우리 자멸률이 43.3%로 전혀 안 줄어듦(개선 효과 없음, 오히려
+               무승부만 늘어 승률 하락) -- 원래(단순 임계값) 버전으로 되돌림.
+               자멸 문제는 VP 조준점 튜닝 수준으로는 해결 안 되는 것으로 결론,
+               md/종합_판단_20260817.md 참고. -->
+          <Sequence>
+            <DECO_AltitudeCheck name="AltitudeCheck_Emergency" UpDown="Less" Altitude="650" BB="{BB}"/>
+            <Task_EmergencyPullUp name="EmergencyPullUp" BB="{BB}"/>
+          </Sequence>
+
+          <!-- 2순위: WEZ 근거리 사격 조준 기동 (Distance <= 914m) -->
+          <Sequence>
+            <DECO_DistanceCheck name="DistanceCheck_WEZ" UpDown="Less" Distance="914" BB="{BB}"/>
+            <Task_WEZAttack name="Task_CloseDogfightWEZ" BB="{BB}"/>
+          </Sequence>
+
+          <!-- 3순위: 방어 기동 (2026-08-17 신규, 1차 실측 후 사거리 축소:
+               3000m로 뒀더니 WEZ(914m)에 들어가기도 전에 서로 미리 회피하며
+               교전 자체를 피해버림(데미지 0건). 상대 무기 사거리(914m) 근처로
+               좁혀서 "진짜 맞을 위험" 있을 때만 반응하도록 함. -->
+          <Sequence>
+            <DECO_DistanceCheck name="DistanceCheck_Threat" UpDown="Less" Distance="1100" BB="{BB}"/>
+            <DECO_ThreatCheck name="ThreatCheck" UpDown="Less" InputLOS="20" BB="{BB}"/>
+            <Task_Evade name="Task_Evade" BB="{BB}"/>
+          </Sequence>
+
+          <!-- 4순위: 중거리 추격 및 6시 꼬리 잡기 (Distance <= 6000m, 2026-08-16 4차
+               튜닝: 3000->6000 확대. 헤드온 머지 그대로 스쳐지나가면 180도 반전에
+               시간이 너무 걸린다는 게 실측으로 확인돼, stern-conversion(꼬리 조준)이
+               더 먼 거리부터 개입해서 애초에 정면충돌 항로가 아니라 휘어들어가는
+               항로를 더 일찍 만들도록 함 -->
+          <Sequence>
+            <DECO_DistanceCheck name="DistanceCheck_Mid" UpDown="Less" Distance="6000" BB="{BB}"/>
+            <Task_MidRangeEngage name="Task_MidRangeEngage" BB="{BB}"/>
+          </Sequence>
+
+          <!-- 5순위: 원거리 접근 인터셉트 기동 (Distance > 6000m) -->
+          <Sequence>
+            <DECO_DistanceCheck name="DistanceCheck_Far" UpDown="Greater" Distance="6000" BB="{BB}"/>
+            <Task_LongRangeApproach name="Task_LongRangeApproach" BB="{BB}"/>
+          </Sequence>
+
+          <!-- 6순위: 기본 예외 보존 기동 -->
+          <Sequence>
+            <Task_Empty name="Task_DefaultMaintenance" BB="{BB}"/>
+          </Sequence>
+        </Fallback>
+      </Sequence>
+    </Sequence>
+  </BehaviorTree>
+</root>
